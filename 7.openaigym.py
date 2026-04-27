@@ -1,60 +1,52 @@
 import gym
+import numpy as np
 from gym import spaces
-import numpy as np, random, time
 
+# Maze Environment
 class MazeEnv(gym.Env):
     def __init__(self):
-        super().__init__()
-        self.maze=np.array([[0,0,0,0],[1,1,0,1],[0,0,0,1],[1,0,0,2]])
-        self.start=(0,0); self.goal=(3,3); self.state=self.start
-        self.action_space=spaces.Discrete(4)
+        self.size = 5
+        self.action_space = spaces.Discrete(4)      # up,down,left,right
+        self.observation_space = spaces.Discrete(25)
+        self.reset()
 
     def reset(self):
-        self.state=self.start
-        return np.array(self.state)
+        self.pos = [0, 0]
+        self.goal = [4, 4]
+        return self.pos[0]*5 + self.pos[1]
 
-    def step(self,a):
-        moves=[(-1,0),(1,0),(0,-1),(0,1)]
-        x=self.state[0]+moves[a][0]; y=self.state[1]+moves[a][1]
-        if x<0 or y<0 or x>=4 or y>=4 or self.maze[x][y]==1:
-            return np.array(self.state),-1,False,{}
-        self.state=(x,y)
-        if self.state==self.goal: return np.array(self.state),10,True,{}
-        return np.array(self.state),-0.1,False,{}
+    def step(self, a):
+        if a==0 and self.pos[0]>0: self.pos[0]-=1
+        if a==1 and self.pos[0]<4: self.pos[0]+=1
+        if a==2 and self.pos[1]>0: self.pos[1]-=1
+        if a==3 and self.pos[1]<4: self.pos[1]+=1
 
-    def render(self):
-        g=self.maze.copy().astype(object)
-        for i in range(4):
-            for j in range(4):
-                g[i][j]="." if g[i][j]==0 else "#" if g[i][j]==1 else "G"
-        x,y=self.state; g[x][y]="A"
-        print()
-        for r in g: print(" ".join(r))
+        done = (self.pos == self.goal)
+        reward = 1 if done else -0.01
+        return self.pos[0]*5 + self.pos[1], reward, done, {}
 
-env=MazeEnv()
-Q=np.zeros((4,4,4))
-
-alpha,gamma,epsilon=0.1,0.9,0.2
+# Initialize
+env = MazeEnv()
+Q = np.zeros((25, 4))
+alpha, gamma, epsilon = 0.1, 0.9, 0.1
 
 # Training
-for _ in range(400):
-    s=env.reset(); done=False
+for _ in range(500):
+    s = env.reset()
+    done = False
     while not done:
-        a=random.randint(0,3) if random.random()<epsilon else np.argmax(Q[s[0],s[1]])
-        ns,r,done,_=env.step(a)
-        Q[s[0],s[1],a]+=alpha*(r+gamma*np.max(Q[ns[0],ns[1]])-Q[s[0],s[1],a])
-        s=ns
+        a = env.action_space.sample() if np.random.rand() < epsilon else np.argmax(Q[s])
+        ns, r, done, _ = env.step(a)
+        Q[s, a] += alpha * (r + gamma * np.max(Q[ns]) - Q[s, a])
+        s = ns
 
-print("\nLearned Q-table:\n",Q)
+print("Training Done")
 
-# Test
-s=env.reset()
-env.render()
-
-for _ in range(20):
-    s,_,d,_=env.step(np.argmax(Q[s[0],s[1]]))
-    env.render()
-    time.sleep(0.4)
-    if d:
-        print("\nGoal Reached!")
-        break
+# Testing
+s = env.reset()
+print("Agent Path:")
+while True:
+    a = np.argmax(Q[s])
+    s, _, done, _ = env.step(a)
+    print(s)
+    if done: break
